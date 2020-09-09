@@ -73,11 +73,9 @@ print("\(vertices.count) vertices")
 print("\(vertexTextures.count) vertex textures")
 print("\(vertexNormals.count) vertex normals")
 
-let camera = (0.0,0.0,0.0)
-let focalLength : Float = 50.0
-let imageWidth = 1024
-let imageHeight = 768
-let imageCenter = (0.0, 0.0, -focalLength)
+let focalLength : Float = 25.0
+let imageWidth = 101
+let imageHeight = 101
 let imageUL = (-imageWidth / 2, imageHeight / 2, -focalLength)
 let imageUR = (imageWidth / 2, imageHeight / 2, -focalLength)
 let imageLL = (-imageWidth / 2, -imageHeight / 2, -focalLength)
@@ -90,26 +88,70 @@ func dp(_ v1 : (Float, Float, Float), _ v2 : (Float, Float, Float)) -> Float {
     return v1.0 * v2.0 + v1.1 * v2.1 + v1.2 * v2.2
 }
 
-// Render a sphere with center (0, 0, 2 * - focalLength) with radius 25
-let radius : Float = 125.0
+func sv(_ v1 : (Float, Float, Float), _ m : (Float)) -> (Float, Float, Float) {
+    return (v1.0 * m, v1.1 * m, v1.2 * m)
+}
+
+func subv(_ v1 : (Float, Float, Float), _ v2 : (Float, Float, Float)) -> (Float, Float, Float) {
+    return (v1.0 - v2.0, v1.1 - v2.1, v1.2 - v2.2)
+}
+
+func unitv(_ v : (Float, Float, Float)) -> (Float, Float, Float) {
+    let vlength = sqrt(dp(v, v))
+    return sv(v, 1 / vlength)
+}
+
+func negv(_ v: (Float, Float, Float)) -> (Float, Float, Float) {
+    return (-v.0, -v.1, -v.2)
+}
+
+// Render a sphere with center (0, 0, -25) with radius 25
+let circleCenter : (Float, Float, Float) = (0, 0, -50)
+let camera : (Float, Float, Float) = (0, 0, 0)
+let radius : Float = 25
 var tangents : Int = 0
 var twoPointIntersections : Int = 0
+let pointLight : (Float, Float, Float) = (0, 50, -50)
+
 for i in 0..<imageWidth {
     for j in 0..<imageHeight {
-        let cameraToPixelVector = (Float(i - imageWidth / 2), Float(j - imageHeight / 2), -focalLength)
-        let cameraToPixelLength = sqrt(dp(cameraToPixelVector, cameraToPixelVector))
-        let c2punit = (cameraToPixelVector.0 / cameraToPixelLength, cameraToPixelVector.1 / cameraToPixelLength, cameraToPixelVector.2 / cameraToPixelLength)
+        let cameraToPixelVector = subv(camera,
+                                       (Float(i - imageWidth / 2), Float(j - imageHeight / 2), -focalLength))
+        let c2punit = unitv(cameraToPixelVector)
         
-        let eyeCenterDiff = (Float(0 - 0), Float(0 - 0), Float(0 - (2.75 * -focalLength)))
+        let eyeCenterDiff = subv(camera, circleCenter)
         let a = -dp(c2punit, eyeCenterDiff)
         let delta = pow(a, 2) - (dp(eyeCenterDiff, eyeCenterDiff) - pow(radius, 2))
+
         let firstByte = j * imageWidth * 4 + i * 4
         if delta < 0 {
             outputbitmap[firstByte] = 0
             outputbitmap[firstByte + 1] = 0
             outputbitmap[firstByte + 2] = 0
-            outputbitmap[firstByte + 3] = 0
+            outputbitmap[firstByte + 3] = 255
             continue
+        }
+
+        let sqrtdelta = sqrt(delta)
+        
+        let d = (a + sqrtdelta, a - sqrtdelta)
+        print("intersection parameter values for (\(i), \(j))")
+        let p1 = sv(c2punit, d.0)
+        let p2 = sv(c2punit, d.1)
+        print("first point of intersection: (\(String(p1.0)), \(String(p1.1)), \(String(p1.2)))")
+        print("second point of intersection: (\(String(p2.0)), \(String(p2.1)), \(String(p2.2)))")
+        
+        let normalAtIntersection : (Float, Float, Float) = unitv(subv(p1, circleCenter))
+        let pointLightVector = negv(unitv(subv(pointLight, p1)))
+        print("pointlight vectoer: (\(String(pointLightVector.0)), \(String(pointLightVector.1)), \(String(pointLightVector.2)))")
+        print("normal at intersection: (\(String(normalAtIntersection.0)), \(String(normalAtIntersection.1)), \(String(normalAtIntersection.2)))")
+
+        var intensityMultipler = dp(pointLightVector, normalAtIntersection)
+        print("Intensity Multiplier: \(intensityMultipler)")
+        if intensityMultipler <= 0 {
+            intensityMultipler = 0.01 // implies normal is in opposite direction of point light vector and shouldn't be illuminated
+        } else {
+            intensityMultipler /= sqrt(dp(pointLightVector, pointLightVector))
         }
         
         if delta == 0 {
@@ -117,8 +159,9 @@ for i in 0..<imageWidth {
         } else {
             twoPointIntersections += 1
         }
-        outputbitmap[firstByte] = 255
-        outputbitmap[firstByte + 1] = 255
+    
+        outputbitmap[firstByte] = UInt8(255 * intensityMultipler)
+        outputbitmap[firstByte + 1] = UInt8(255 * intensityMultipler)
         outputbitmap[firstByte + 2] = 255
         outputbitmap[firstByte + 3] = 255
     }
