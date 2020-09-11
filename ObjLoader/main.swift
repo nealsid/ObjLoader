@@ -90,12 +90,16 @@ func addv(_ v1 : (Float, Float, Float), _ v2 : (Float, Float, Float)) -> (Float,
 }
 
 func unitv(_ v : (Float, Float, Float)) -> (Float, Float, Float) {
-    let vlength = sqrt(dp(v, v))
+    let vlength = vlen(v)
     return sv(v, 1 / vlength)
 }
 
 func negv(_ v: (Float, Float, Float)) -> (Float, Float, Float) {
     return (-v.0, -v.1, -v.2)
+}
+
+func vlen(_ v: (Float, Float, Float)) -> Float {
+    return sqrt(dp(v, v))
 }
 
 let focalLength : Float = 25.0
@@ -111,23 +115,22 @@ var outputbitmap : [UInt8] = [UInt8](repeating: 0, count: 4 * imageWidth * image
 
 // Render a sphere with center (0, 0, 0) with radius 25
 let circleCenter : (Float, Float, Float) = (0, 0, 0)
-let radius : Float = 25
+let radius : Float = 20
+let radiusSquared : Float = pow(radius, 2)
 let camera : (Float, Float, Float) = (0, 0, 50)
+let cameraDirection : (Float, Float, Float) = (0, 0, -1)
 var tangents : Int = 0
 var twoPointIntersections : Int = 0
-let pointLight : (Float, Float, Float) = (0, 50, 0)
+let pointLight : (Float, Float, Float) = (0, 30,20)
 
 for i in 0..<imageWidth {
     for j in 0..<imageHeight {
-        if i == 50 && j == 36 {
-            raise(SIGINT)
-        }
-        let cameraToPixelVector = subv((Float(i - imageWidth / 2), Float(imageHeight / 2 - j), 25), camera)
+        let cameraToPixelVector = subv((Float(i - imageWidth / 2), Float(imageHeight / 2 - j), camera.2 - focalLength), camera)
         let c2punit = unitv(cameraToPixelVector)
         
         let eyeCenterDiff = subv(camera, circleCenter)
         let a = -dp(c2punit, eyeCenterDiff)
-        let delta = pow(a, 2) - (dp(eyeCenterDiff, eyeCenterDiff) - pow(radius, 2))
+        let delta = pow(a, 2) - (dp(eyeCenterDiff, eyeCenterDiff) - radiusSquared)
 
         let firstByte = j * imageWidth * 4 + i * 4
         if delta < 0 {
@@ -149,11 +152,24 @@ for i in 0..<imageWidth {
 //        print("second point of intersection: (\(String(p2.0)), \(String(p2.1)), \(String(p2.2)))")
         print("Point of intersection: (\(String(p.0)), \(String(p.1)), \(String(p.2)))")
         print("Point of intersection: (\(String(q.0)), \(String(q.1)), \(String(q.2)))")
-        let normalAtIntersection : (Float, Float, Float) = unitv(subv(p, circleCenter))
-        let pointLightVector = unitv(subv(pointLight, p))
-        print("pointlight vectoer: (\(String(pointLightVector.0)), \(String(pointLightVector.1)), \(String(pointLightVector.2)))")
+        let cam2P = subv(p, camera)
+        let cam2Q = subv(q, camera)
+        let pdist = vlen(cam2P)
+        let qdist = vlen(cam2Q)
+        
+        var spherePoint : (Float, Float, Float)
+        
+        if pdist < qdist {
+            spherePoint = p
+        } else {
+            spherePoint = q
+        }
+        
+        var normalAtIntersection : (Float, Float, Float) = subv(spherePoint, circleCenter)
+        let pointLightVector = unitv(subv(pointLight, spherePoint))
+        print("pointlight vector: (\(String(pointLightVector.0)), \(String(pointLightVector.1)), \(String(pointLightVector.2)))")
         print("normal at intersection: (\(String(normalAtIntersection.0)), \(String(normalAtIntersection.1)), \(String(normalAtIntersection.2)))")
-
+        normalAtIntersection = unitv(normalAtIntersection)
         var intensityMultipler = dp(pointLightVector, normalAtIntersection)
         print("Intensity Multiplier: \(intensityMultipler)")
         if intensityMultipler <= 0 {
@@ -168,10 +184,18 @@ for i in 0..<imageWidth {
             twoPointIntersections += 1
         }
         
-        outputbitmap[firstByte] = UInt8(255 * intensityMultipler)
-        outputbitmap[firstByte + 1] = UInt8(255 * intensityMultipler)
-        outputbitmap[firstByte + 2] = 255
-        outputbitmap[firstByte + 3] = 255
+        if i == 462 && j == 411 {
+            outputbitmap[firstByte] = 0
+            outputbitmap[firstByte + 1] = 255
+            outputbitmap[firstByte + 2] = 0
+            outputbitmap[firstByte + 3] = 255
+
+        } else {
+            outputbitmap[firstByte] = UInt8(255 * intensityMultipler)
+            outputbitmap[firstByte + 1] = UInt8(255 * intensityMultipler)
+            outputbitmap[firstByte + 2] = 255
+            outputbitmap[firstByte + 3] = 255
+        }
     }
 }
 
